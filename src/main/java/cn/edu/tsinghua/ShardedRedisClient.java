@@ -21,7 +21,7 @@ public class ShardedRedisClient {
     protected static final Logger LOG = LoggerFactory.getLogger(ShardedRedisClient.class);
 
     private static final int DEFAULT_TIMEOUT = 3000;
-    private static final String LOG_RECORD_SHARD_KEY = "log_record:";
+    private static final String LOG_RECORD_SHARD_KEY = "lr:";
 
     private final JedisPool _masterJedisPool;
     private final Jedis _masterJedis;
