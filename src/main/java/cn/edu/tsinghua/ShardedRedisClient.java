@@ -38,12 +38,28 @@ public class ShardedRedisClient {
         HostnameAndPort slave = null;
         for(String slaveHost: slaveHosts) {
             slave = new HostnameAndPort(slaveHost);
-            shards.add(new JedisShardInfo(slave.getHostName(), slave.getPort(), 3000));
+            shards.add(new JedisShardInfo(slave.getHostName(), slave.getPort(), DEFAULT_TIMEOUT));
         }
         _slaveShardedJedis = new ShardedJedis(shards, Hashing.MURMUR_HASH); // use murmur hash to hash the keys
 
         for(Jedis slaveJedis: _slaveShardedJedis.getAllShards())
             slaveJedis.slaveof(masterHostName, masterHostPort);
+    }
+
+    public final String get(String key) {
+        return _slaveShardedJedis.get(key);
+    }
+
+    public final void set(String key, String value, int seconds) {
+        _slaveShardedJedis.setex(key, seconds, value);
+    }
+
+    public final byte[] get(byte[] key) {
+        return _slaveShardedJedis.get(key);
+    }
+
+    public final void set(byte[] key, byte[] value, int seconds) {
+        _slaveShardedJedis.setex(key, seconds, value);
     }
 
     public final List<String> multiGet(List<String> fields) {

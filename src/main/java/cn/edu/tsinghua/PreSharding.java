@@ -12,7 +12,7 @@ import org.json.JSONException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import util.ConfigLoader;
+import cn.edu.tsinghua.util.ConfigLoader;
 
 public class PreSharding {
 	private static final Logger LOG = LoggerFactory.getLogger(PreSharding.class);
@@ -24,66 +24,73 @@ public class PreSharding {
 	private static final String MASTER_HOST_KEY = "master.host";
 	private static final String SLAVE_HOSTS_KEY = "slave.hosts";
 
-	private final Map<Integer, MasterSlaves> _masterSlaves = new HashMap<Integer, MasterSlaves>();
+    private final ConsistentHashing _hashing;
 
-	public PreSharding() {
-		this(null);
+    private Map<String, ShardedRedisClient> _shardedRedisClients;
+
+	public PreSharding(ConsistentHashing hashing) {
+        _hashing = hashing;
 	}
 
-	public PreSharding(String configFile) {
-		loadConfig(configFile);
-	}
+    public void init(String configFile) {
+        Map<String, String> host2Ids = new HashMap<String, String>();
+        try {
+            String config = (configFile == null) ? ConfigLoader.loadJsonFileFromJarPackage(DEFAULT_REDIS_CONFIG_FILE)
+                    : ConfigLoader.loadJsonFileFromLocalFileSystem(configFile);
 
-	private void loadConfig(String configFile) {
-        	String config = (configFile == null) ? ConfigLoader.loadJsonFileFromJarPackage(DEFAULT_REDIS_CONFIG_FILE)
-            		: ConfigLoader.loadJsonFileFromLocalFileSystem(configFile);
+            _shardedRedisClients = new HashMap<String, ShardedRedisClient>();
 
-		try {
-			JSONObject configJson = new JSONObject(config);
-			JSONArray redisSetupJson = configJson.getJSONArray("redis.setup");
-			for(int i = 0; i < redisSetupJson.length(); ++i) {
-				JSONObject masterSlavesJson = redisSetupJson.getJSONObject(i);
-				int masterId = masterSlavesJson.getInt(MASTER_ID_KEY);
-				MasterSlaves masterSlaves = new MasterSlaves(masterSlavesJson.getString(MASTER_HOST_KEY), masterSlavesJson.getString(SLAVE_HOSTS_KEY));
-				_masterSlaves.put(masterId, masterSlaves);
-			}
-		}catch(JSONException jsone) {
-                        LOG.error(jsone.toString());
-                        return;
-                }
-	}
+            JSONObject configJson = new JSONObject(config);
+            JSONArray redisSetupJson = configJson.getJSONArray(REDIS_SETUP_KEY);
+            for(int i = 0; i < redisSetupJson.length(); ++i) {
+                JSONObject masterSlavesJson = redisSetupJson.getJSONObject(i);
+                String masterId = masterSlavesJson.getString(MASTER_ID_KEY);
+                String masterHost = masterSlavesJson.getString(MASTER_HOST_KEY);
+                _shardedRedisClients.put(masterId, new ShardedRedisClient(masterHost,
+                        split(masterSlavesJson.getString(SLAVE_HOSTS_KEY), ',')));
 
-	private class MasterSlaves {
-		private final String _master;
-		private final List<String> _slaves;
-	
-		public MasterSlaves(String master, String slaves) {
-			_master = master;
-			_slaves = split(slaves, ',');	
-		}
+                host2Ids.put(masterHost, masterId);
+            }
+        }catch(JSONException jsone) {
+            LOG.error(jsone.toString());
+        }
 
-		private final List<String> split(String s, int delimeter) {
-			List<String> splits = new ArrayList<String>();
+        _hashing.initHosts(host2Ids);
+    }
 
-			int start = 0;
-			int end = s.indexOf(delimeter);
-			while(end != -1) {
-				splits.add(s.substring(start, end));
+    public final String get(String key) {
+        String shardId = _hashing.hash(key);
+        return _shardedRedisClients.get(shardId).get(key);
+    }
 
-				start = end+1;
-				end = s.indexOf(delimeter, start);
-			}
-			splits.add(s.substring(start));
+    public final void set(String key, String value, int seconds) {
+        String shardId = _hashing.hash(key);
+        _shardedRedisClients.get(shardId).set(key, value, seconds);
+    }
 
-			return splits;
-		}
+    public final byte[] get(byte[] key) {
+        String shardId = _hashing.hash(key);
+        return _shardedRedisClients.get(shardId).get(key);
+    }
 
-		public final String getMaster() {
-			return _master;
-		}
+    public final void set(byte[] key, byte[] value, int seconds) {
+        String shardId = _hashing.hash(key);
+        _shardedRedisClients.get(shardId).set(key, value, seconds);
+    }
 
-		public final List<String> getSlaves() {
-			return _slaves;
-		}
-	}
+    private final List<String> split(String s, int delimiter) {
+        List<String> splits = new ArrayList<String>();
+
+        int start = 0;
+        int end = s.indexOf(delimiter);
+        while(end != -1) {
+            splits.add(s.substring(start, end));
+
+            start = end+1;
+            end = s.indexOf(delimiter, start);
+        }
+        splits.add(s.substring(start));
+
+        return splits;
+    }
 }

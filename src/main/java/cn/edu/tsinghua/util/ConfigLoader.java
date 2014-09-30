@@ -1,4 +1,4 @@
-package util;
+package cn.edu.tsinghua.util;
 
 import java.io.InputStreamReader;
 import java.io.FileReader;
