@@ -11,23 +11,25 @@ import org.slf4j.LoggerFactory;
 public class ConfigLoader {
 	private static final Logger LOG = LoggerFactory.getLogger(ConfigLoader.class);
 	
-	public static String loadJsonFileFromJarPackage(String jsonFile) {
+	public static String loadJsonFileFromJarPackage(String jsonFile) throws IOException {
 		return loadJsonFile(new InputStreamReader(ConfigLoader.class.getResourceAsStream(jsonFile)));
 	}
 
-	public static String loadJsonFileFromLocalFileSystem(String jsonFile) {
-		FileReader reader = null;
-		try {
-			reader = new FileReader(jsonFile);
-		}catch(FileNotFoundException fnfe) {
-			LOG.error(fnfe.toString());
-			return null;
-		}
-			
-		return loadJsonFile(reader);
+    /*
+     * Try to load configuration from file "jsonFile" in json in local filesystem.
+     * If file "jsonFile" not found, load configuration from file "defaultJsonFile" in json packaged in jar.
+     */
+	public static String loadJsonFileFromLocalFileSystem(String jsonFile, String defaultJsonFile) throws IOException {
+        try {
+            return loadJsonFile(new FileReader(jsonFile));
+        } catch (FileNotFoundException fnfe) {
+            LOG.warn(fnfe.toString());
+
+            return loadJsonFile(new InputStreamReader(ConfigLoader.class.getResourceAsStream(defaultJsonFile)));
+        }
 	}
 
-	private static String loadJsonFile(InputStreamReader reader) {
+	private static String loadJsonFile(InputStreamReader reader) throws IOException {
 		final int BUFFER_SIZE = 256;
 	
 		StringBuilder jsonStr = new StringBuilder();
@@ -36,15 +38,11 @@ public class ConfigLoader {
 			int bytesRead = -1;
 			while((bytesRead = reader.read(buffer, 0, BUFFER_SIZE)) != -1)
 				jsonStr.append(buffer, 0, bytesRead);
-		}catch(IOException ioe) {
-			LOG.error(ioe.toString());
-			return null;
 		}finally {
 			try {
 				reader.close();
 			}catch(IOException ioe) {
-				LOG.error(ioe.toString());
-				return null;
+				LOG.warn(ioe.toString());
 			}
 		}
 		

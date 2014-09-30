@@ -24,21 +24,23 @@ public class PreSharding {
 	private static final String MASTER_HOST_KEY = "master.host";
 	private static final String SLAVE_HOSTS_KEY = "slave.hosts";
 
-    private final ConsistentHashing _hashing;
-
+    private final ConsistentHash _hashing;
     private Map<String, ShardedRedisClient> _shardedRedisClients;
 
-	public PreSharding(ConsistentHashing hashing) {
+	public PreSharding(ConsistentHash hashing) {
         _hashing = hashing;
+        _shardedRedisClients = new HashMap<String, ShardedRedisClient>();
 	}
 
-    public void init(String configFile) {
+    public void init() throws Exception {
+        init(null);
+    }
+
+    public void init(String configFile) throws Exception {
         Map<String, String> host2Ids = new HashMap<String, String>();
         try {
             String config = (configFile == null) ? ConfigLoader.loadJsonFileFromJarPackage(DEFAULT_REDIS_CONFIG_FILE)
-                    : ConfigLoader.loadJsonFileFromLocalFileSystem(configFile);
-
-            _shardedRedisClients = new HashMap<String, ShardedRedisClient>();
+                : ConfigLoader.loadJsonFileFromLocalFileSystem(configFile, DEFAULT_REDIS_CONFIG_FILE);
 
             JSONObject configJson = new JSONObject(config);
             JSONArray redisSetupJson = configJson.getJSONArray(REDIS_SETUP_KEY);
@@ -51,30 +53,32 @@ public class PreSharding {
 
                 host2Ids.put(masterHost, masterId);
             }
-        }catch(JSONException jsone) {
-            LOG.error(jsone.toString());
+        }catch(Exception e) {
+            LOG.error(e.toString());
+
+            throw e;
         }
 
         _hashing.initHosts(host2Ids);
     }
 
     public final String get(String key) {
-        String shardId = _hashing.hash(key);
+        String shardId = _hashing.getHost(key);
         return _shardedRedisClients.get(shardId).get(key);
     }
 
     public final void set(String key, String value, int seconds) {
-        String shardId = _hashing.hash(key);
+        String shardId = _hashing.getHost(key);
         _shardedRedisClients.get(shardId).set(key, value, seconds);
     }
 
     public final byte[] get(byte[] key) {
-        String shardId = _hashing.hash(key);
+        String shardId = _hashing.getHost(key);
         return _shardedRedisClients.get(shardId).get(key);
     }
 
     public final void set(byte[] key, byte[] value, int seconds) {
-        String shardId = _hashing.hash(key);
+        String shardId = _hashing.getHost(key);
         _shardedRedisClients.get(shardId).set(key, value, seconds);
     }
 
@@ -92,5 +96,12 @@ public class PreSharding {
         splits.add(s.substring(start));
 
         return splits;
+    }
+
+    private static void main(String[] args) throws Exception {
+        PreSharding preSharding = new PreSharding(new PlainConsistentHash(HashAlgorithm.PLAIN_HASH_ALGORITHM, 100));
+        preSharding.init();
+
+        // TODO: do some test
     }
 }
