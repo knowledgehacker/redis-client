@@ -5,10 +5,10 @@ package cn.edu.tsinghua;
  */
 public class PlainHashAlgorithm extends HashAlgorithm {
     public int hash(String key) {
-        return key.hashCode();
+        return Math.abs(key.hashCode());
     }
 
     public int hash(byte[] key) {
-        return key.hashCode();
+        return Math.abs(key.hashCode());
     }
 }

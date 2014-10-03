@@ -14,8 +14,8 @@ import org.slf4j.LoggerFactory;
 
 import cn.edu.tsinghua.util.ConfigLoader;
 
-public class PreSharding {
-	private static final Logger LOG = LoggerFactory.getLogger(PreSharding.class);
+public class Sharding {
+	private static final Logger LOG = LoggerFactory.getLogger(Sharding.class);
 
 	private static final String DEFAULT_REDIS_CONFIG_FILE = "/redis.json";
 
@@ -27,7 +27,7 @@ public class PreSharding {
     private final ConsistentHash _hashing;
     private Map<String, ShardedRedisClient> _shardedRedisClients;
 
-	public PreSharding(ConsistentHash hashing) {
+	public Sharding(ConsistentHash hashing) {
         _hashing = hashing;
         _shardedRedisClients = new HashMap<String, ShardedRedisClient>();
 	}
@@ -99,8 +99,8 @@ public class PreSharding {
     }
 
     private static void main(String[] args) throws Exception {
-        PreSharding preSharding = new PreSharding(new PlainConsistentHash(HashAlgorithm.PLAIN_HASH_ALGORITHM, 100));
-        preSharding.init();
+        Sharding sharding = new Sharding(new PlainConsistentHash(HashAlgorithm.PLAIN_HASH_ALGORITHM, 100));
+        sharding.init();
 
         // TODO: do some test
     }
