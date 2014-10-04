@@ -7,7 +7,6 @@ import java.util.HashMap;
 
 import org.json.JSONObject;
 import org.json.JSONArray;
-import org.json.JSONException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,7 +18,7 @@ public class Sharding {
 
 	private static final String DEFAULT_REDIS_CONFIG_FILE = "/redis.json";
 
-	private static final String REDIS_SETUP_KEY = "redis-setup";
+	private static final String REDIS_SETUP_KEY = "redis.setup";
 	private static final String MASTER_ID_KEY = "master.id";
 	private static final String MASTER_HOST_KEY = "master.host";
 	private static final String SLAVE_HOSTS_KEY = "slave.hosts";
@@ -82,6 +81,79 @@ public class Sharding {
         _shardedRedisClients.get(shardId).set(key, value, seconds);
     }
 
+    public final List<String> multiGet(List<String> keys) {
+        List<String> values = new ArrayList<String>();
+
+        Map<String, List<String>> shardedKeys = new HashMap<String, List<String>>();
+        for(String key: keys) {
+            String shardId = _hashing.getHost(key);
+            List<String> keyList = shardedKeys.get(shardId);
+            if(keyList == null) {
+                keyList = new ArrayList<String>();
+                keyList.add(key);
+                shardedKeys.put(shardId, keyList);
+            } else
+                keyList.add(key);
+        }
+
+        Map<String, String> keyValues = new HashMap<String, String>();
+        for(Map.Entry<String, List<String>> entry: shardedKeys.entrySet()) {
+            String shardId = entry.getKey();
+            List<String> keyList = entry.getValue();
+            List<String> valueList = _shardedRedisClients.get(shardId).multiGet(keyList);
+            for(int i = 0; i < keyList.size(); ++i)
+                keyValues.put(keyList.get(i), valueList.get(i));
+        }
+
+        for(String key: keys)
+            values.add(keyValues.get(key));
+
+        return values;
+    }
+
+    public final void multiSet(Map<String, String> keyValues, int seconds) {
+        Map<String, Map<String, String>> shardedKeyValues = new HashMap<String, Map<String, String>>();
+        for(Map.Entry<String, String> entry: keyValues.entrySet()) {
+            String key = entry.getKey();
+            String shardId = _hashing.getHost(key);
+            Map<String, String> keyValueMap = shardedKeyValues.get(shardId);
+            if(keyValueMap == null) {
+                keyValueMap = new HashMap<String, String>();
+                keyValueMap.put(key, entry.getValue());
+                shardedKeyValues.put(shardId, keyValueMap);
+            } else
+                keyValueMap.put(key, entry.getValue());
+        }
+
+        for(Map.Entry<String, Map<String, String>> entry: shardedKeyValues.entrySet())
+            _shardedRedisClients.get(entry.getKey()).multiSet(entry.getValue(), seconds);
+    }
+
+    public final void multiSet(List<String> keys, List<String> values, int seconds) {
+        int keySize = keys.size();
+        if(keySize != values.size()) {
+            LOG.error("keys.size() != values.size()");
+            return;
+        }
+
+        Map<String, Map<String, String>> shardedKeyValues = new HashMap<String, Map<String, String>>();
+        for(int i = 0; i < keySize; ++i) {
+            String key = keys.get(i);
+            String shardId = _hashing.getHost(key);
+            System.out.println("multiSet - shardId: " + shardId);
+            Map<String, String> keyValueMap = shardedKeyValues.get(shardId);
+            if(keyValueMap == null) {
+                keyValueMap = new HashMap<String, String>();
+                keyValueMap.put(key, values.get(i));
+                shardedKeyValues.put(shardId, keyValueMap);
+            } else
+                keyValueMap.put(key, values.get(i));
+        }
+
+        for(Map.Entry<String, Map<String, String>> entry: shardedKeyValues.entrySet())
+            _shardedRedisClients.get(entry.getKey()).multiSet(entry.getValue(), seconds);
+    }
+
     private final List<String> split(String s, int delimiter) {
         List<String> splits = new ArrayList<String>();
 
@@ -98,10 +170,25 @@ public class Sharding {
         return splits;
     }
 
-    private static void main(String[] args) throws Exception {
-        Sharding sharding = new Sharding(new PlainConsistentHash(HashAlgorithm.PLAIN_HASH_ALGORITHM, 100));
+    public static void main(String[] args) throws Exception {
+        Sharding sharding = new Sharding(new PlainConsistentHash(HashAlgorithm.PLAIN_HASH_ALGORITHM, 7));
         sharding.init();
 
-        // TODO: do some test
+        int count = 10000;
+        List<String> keys = new ArrayList<String>();
+        for(int i = 0; i < count; ++i)
+            keys.add("test_key_" + i);
+        List<String> setValues = new ArrayList<String>();
+        for(int i = 0; i < count; ++i)
+            setValues.add("test_value_" + i);
+        long start = System.currentTimeMillis();
+        sharding.multiSet(keys, setValues, 10);
+        System.out.println("multiSet took " + (System.currentTimeMillis() - start) + " milliseconds.");
+        /*
+        List<String> getValues = sharding.multiGet(keys);
+        for(String getValue: getValues)
+            System.out.println("getValue: " + getValue);
+        */
+        System.out.println("Time took " + (System.currentTimeMillis() - start) + " milliseconds.");
     }
 }

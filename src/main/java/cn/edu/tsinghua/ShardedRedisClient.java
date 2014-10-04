@@ -8,16 +8,18 @@ import java.util.ArrayList;
 import java.util.Map;
 import java.util.HashMap;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import redis.clients.jedis.JedisPoolConfig;
 import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.Jedis;
+import redis.clients.jedis.JedisMonitor;
 import redis.clients.jedis.JedisShardInfo;
 import redis.clients.jedis.ShardedJedis;
 import redis.clients.jedis.Pipeline;
 import redis.clients.jedis.ShardedJedisPipeline;
 import redis.clients.util.Hashing;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class ShardedRedisClient {
     protected static final Logger LOG = LoggerFactory.getLogger(ShardedRedisClient.class);
@@ -36,19 +38,50 @@ public class ShardedRedisClient {
         HostnameAndPort master = new HostnameAndPort(masterHost);
         String masterHostName = master.getHostName();
         int masterHostPort = master.getPort();
+        //System.out.println("masterHostName: " + masterHostName + ", masterHostPort: " + masterHostPort);
         _masterJedisPool = new JedisPool(new JedisPoolConfig(), masterHostName, masterHostPort, timeout);
         _masterJedis = _masterJedisPool.getResource();
+
+        /*
+        new Thread() {
+            public void run() {
+                _masterJedis.monitor(new JedisMonitor() {
+                    @Override
+                    public void onCommand(String command) {
+                        if(command.contains("test_"))
+                            System.out.println("master-onCommand: " + command);
+                    }
+                });
+            }
+        }.start();
+        */
 
         List<JedisShardInfo> shards = new ArrayList<JedisShardInfo>();
         HostnameAndPort slave = null;
         for(String slaveHost: slaveHosts) {
             slave = new HostnameAndPort(slaveHost);
             shards.add(new JedisShardInfo(slave.getHostName(), slave.getPort(), timeout));
+            //System.out.println("slaveHostName: " + slave.getHostName() + ", slaveHostPort: " + slave.getPort());
         }
         _slaveShardedJedis = new ShardedJedis(shards, Hashing.MURMUR_HASH); // use murmur hash to hash the keys
 
-        for(Jedis slaveJedis: _slaveShardedJedis.getAllShards())
+        for(final Jedis slaveJedis: _slaveShardedJedis.getAllShards()) {
             slaveJedis.slaveof(masterHostName, masterHostPort);
+
+            /*
+            new Thread() {
+                public void run() {
+                    slaveJedis.monitor(new JedisMonitor() {
+                        @Override
+                        public void onCommand (String command){
+                            if (command.contains("test_"))
+                                System.out.println(slaveJedis + "-onCommand: " + command);
+                        }
+                    });
+                }
+            }.start();
+            */
+        }
     }
 
     public final String get(String key) {
@@ -212,7 +245,7 @@ public class ShardedRedisClient {
 
         ShardedRedisClient client = new ShardedRedisClient(masterHost, slaveHosts);
        
-		int count = 10000;
+		int count = 10;
         List<String> fields = new ArrayList<String>();
 		List<String> values = new ArrayList<String>();
         for(int i = 0; i < count; ++i) {

@@ -33,11 +33,11 @@ public class PlainConsistentHash implements ConsistentHash {
     }
 
     public void addHost(String host, String id) {
-        System.out.println("host: " + host + " => ");
+        //System.out.println("host: " + host + " => ");
         for(int i = 0; i < _replicas; ++i) {
-            int cachePoint = _hashAlgorithm.hash(host + i);
+            int cachePoint = _hashAlgorithm.hash(host + 5*i);
             _cachePoints.put(cachePoint, id);
-            System.out.println("hash code: " + cachePoint + " -> id: " + id);
+            //System.out.println("hash code: " + cachePoint + " -> id: " + id);
         }
     }
 
