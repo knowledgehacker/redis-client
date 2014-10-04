@@ -56,7 +56,7 @@ public class ShardedRedisClient {
     }
 
     public final void set(String key, String value, int seconds) {
-        _slaveShardedJedis.setex(key, seconds, value);
+        _masterJedis.setex(key, seconds, value);
     }
 
     public final byte[] get(byte[] key) {
@@ -64,7 +64,7 @@ public class ShardedRedisClient {
     }
 
     public final void set(byte[] key, byte[] value, int seconds) {
-        _slaveShardedJedis.setex(key, seconds, value);
+        _masterJedis.setex(key, seconds, value);
     }
 
     /*
@@ -212,15 +212,32 @@ public class ShardedRedisClient {
 
         ShardedRedisClient client = new ShardedRedisClient(masterHost, slaveHosts);
        
-	    long start = System.currentTimeMillis();
+		int count = 10000;
         List<String> fields = new ArrayList<String>();
-        for(int i = 0; i < 10000; ++i)
+		List<String> values = new ArrayList<String>();
+        for(int i = 0; i < count; ++i) {
             fields.add("test_field_" + i);
+			values.add("test_value_" + i);
+		}
         Map<String, String> fieldValues = new HashMap<String, String>();
         for(int i = 0; i < fields.size(); ++i)
-            fieldValues.put(fields.get(i), "test_value_multiSet_xx" + i);
+            fieldValues.put(fields.get(i), values.get(i));
+	    
+		long start = System.currentTimeMillis();
         client.multiSet(fieldValues, 3);
+		System.out.println("multiSet took " + (System.currentTimeMillis() - start) + " milliseconds.");
+	
+		/*
+ 		 * set 10000 <key, value> pairs here using multiSet takes about 206ms.
+ 		 * while set 10000 <key, value> pairs using set takes about 1016 ms.
+ 		 */
+		/* 
+		for(int i = 0; i < 10000; ++i)
+			client.set(fields.get(i), values.get(i), 3);
+		System.out.println("set took " + (System.currentTimeMillis() - start) + " milliseconds.");
+		*/
 
+		/*
         List<String> values = client.multiGet(fields.subList(0, 10));
         for(String value: values)
             System.out.println("value: " + value);
@@ -234,6 +251,7 @@ public class ShardedRedisClient {
         values = client.multiGet(fields.subList(0, 10));
         for(String value: values)
             System.out.println("value: " + value);
+		*/
 
         System.out.println("Time took " + (System.currentTimeMillis() - start) + " milliseconds.");
     }
